@@ -6,7 +6,7 @@ module MT19937
 import Base: rand
 
 export MT19937State, initialize_state!, random_uint32!, rand_float64!, MersenneTwister
-export untemper, clonefromoutput
+export untemper, clonefromoutput, mersenne_encrypt, MersenneStream
 
 const N = 624
 const M = 397
@@ -123,6 +123,32 @@ function clonefromoutput(outputs::Vector{UInt32})
         mt[i] = untemper(outputs[i])
     end
     return MT19937State(mt, N)
+end
+
+""" Create a MersenneTwister stream as an iterator from a given seed. """
+struct MersenneStream
+    rng::MT19937State
+end
+function Base.iterate(stream::MersenneStream, lastbytes = UInt8[])
+    if isempty(lastbytes)
+        append!(lastbytes, reinterpret(UInt8, [random_uint32!(stream.rng)]))
+    end
+    byte = popfirst!(lastbytes)
+    return (byte, lastbytes)
+end
+
+function mersenne_encrypt(plaintext, seed::UInt16)
+    len = length(plaintext)
+    @assert len > 0 "Plaintext must be non-empty."
+    encrypted = Vector{UInt8}(undef, len)
+    state = MT19937State()
+    initialize_state!(state, UInt32(seed))
+    stream = MersenneStream(state)
+    for (i, xorbyte) in enumerate(stream)
+        encrypted[i] = plaintext[i] ⊻ xorbyte
+        i >= len && break
+    end
+    return encrypted
 end
 
 
